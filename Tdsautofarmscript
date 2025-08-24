@@ -1,0 +1,257 @@
+-- Key system
+local FIXED_KEY = "QWEJSIUSBWKXO"
+local FILE_NAME = "key_status.txt"
+local KEY_DURATION = 86400 -- 24h
+local LINK = "https://lootdest.org/s?b3Wzy145"
+
+local function isKeyValid()
+    if pcall(function() return readfile(FILE_NAME) end) then
+        local content = readfile(FILE_NAME)
+        local savedKey, expireTime = content:match("^(.-)|(%d+)$")
+        expireTime = tonumber(expireTime)
+        if savedKey == FIXED_KEY and os.time() < expireTime then
+            return true
+        end
+    end
+    return false
+end
+
+local function saveKey()
+    local expireTime = os.time() + KEY_DURATION
+    writefile(FILE_NAME, FIXED_KEY.."|"..expireTime)
+end
+
+-- GUI
+local ScreenGui = Instance.new("ScreenGui")
+local Frame = Instance.new("Frame")
+local KeyBox = Instance.new("TextBox")
+local GetKeyButton = Instance.new("TextButton")
+local CheckKeyButton = Instance.new("TextButton")
+local StatusLabel = Instance.new("TextLabel")
+
+ScreenGui.Parent = game.CoreGui
+ScreenGui.ResetOnSpawn = false
+
+Frame.Parent = ScreenGui
+Frame.Size = UDim2.new(0, 300, 0, 220)
+Frame.Position = UDim2.new(0.5, -150, 0.5, -110)
+Frame.BackgroundColor3 = Color3.fromRGB(50,50,50)
+
+KeyBox.Parent = Frame
+KeyBox.Size = UDim2.new(0, 200, 0, 40)
+KeyBox.Position = UDim2.new(0.5, -100, 0.15, 0)
+KeyBox.PlaceholderText = "Enter key here"
+
+GetKeyButton.Parent = Frame
+GetKeyButton.Size = UDim2.new(0, 200, 0, 40)
+GetKeyButton.Position = UDim2.new(0.5, -100, 0.4, 0)
+GetKeyButton.Text = "Get Key"
+
+CheckKeyButton.Parent = Frame
+CheckKeyButton.Size = UDim2.new(0, 200, 0, 40)
+CheckKeyButton.Position = UDim2.new(0.5, -100, 0.6, 0)
+CheckKeyButton.Text = "Check Key"
+
+StatusLabel.Parent = Frame
+StatusLabel.Size = UDim2.new(0, 200, 0, 30)
+StatusLabel.Position = UDim2.new(0.5, -100, 0.8, 0)
+StatusLabel.Text = "BlackCat Hub - Inactive"
+StatusLabel.TextColor3 = Color3.fromRGB(255,0,0)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.TextScaled = true
+
+-- Функция для автоматического нажатия красной кнопки "Back to Lobby"
+local function setupBackButtonAutoClick()
+    spawn(function()
+        while true do
+            task.wait(2) -- Проверяем каждые 2 секунды
+            
+            -- Ищем кнопку "Back to Lobby" в интерфейсе
+            local success, backButton = pcall(function()
+                -- Поиск по характерным признакам красной кнопки
+                local playerGui = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+                for _, gui in ipairs(playerGui:GetChildren()) do
+                    if gui:FindFirstChild("BackToLobby", true) or 
+                       gui:FindFirstChild("BackToLobbyButton", true) or
+                       gui:FindFirstChild("ReturnToLobby", true) then
+                        -- Нашли кнопку по имени
+                        return gui:FindFirstChild("BackToLobby") or 
+                               gui:FindFirstChild("BackToLobbyButton") or
+                               gui:FindFirstChild("ReturnToLobby")
+                    end
+                    
+                    -- Поиск по тексту и цвету
+                    local function searchForRedButton(guiObject)
+                        if guiObject:IsA("TextButton") or guiObject:IsA("ImageButton") then
+                            local text = (guiObject.Text or ""):lower()
+                            local isRedButton = guiObject.BackgroundColor3.r > 0.7 and 
+                                              guiObject.BackgroundColor3.g < 0.3 and 
+                                              guiObject.BackgroundColor3.b < 0.3
+                            
+                            if (text:find("back") or text:find("lobby") or text:find("return")) and isRedButton then
+                                return guiObject
+                            end
+                        end
+                        
+                        for _, child in ipairs(guiObject:GetChildren()) do
+                            local result = searchForRedButton(child)
+                            if result then return result end
+                        end
+                        return nil
+                    end
+                    
+                    local redButton = searchForRedButton(gui)
+                    if redButton then return redButton end
+                end
+                return nil
+            end)
+            
+            -- Если нашли кнопку, нажимаем на нее
+            if success and backButton and backButton:IsA("GuiButton") then
+                pcall(function()
+                    backButton:Fire("MouseButton1Click")
+                    game:GetService("StarterGui"):SetCore("SendNotification", {
+                        Title = "Auto Click",
+                        Text = "Clicked Back to Lobby button",
+                        Duration = 2
+                    })
+                end)
+            end
+        end
+    end)
+end
+
+-- Nút Get Key: chỉ copy link lootdest
+GetKeyButton.MouseButton1Click:Connect(function()
+    local success, err = pcall(function()
+        setclipboard(LINK)
+    end)
+    if success then
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "Key System",
+            Text = "Link copied to clipboard!",
+            Duration = 4
+        })
+    else
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "Key System",
+            Text = "Failed to copy link: "..tostring(err),
+            Duration = 4
+        })
+    end
+end)
+
+-- Hàm chạy script auto
+local function runAutoScript()
+    StatusLabel.Text = "BlackCat Hub - Active"
+    StatusLabel.TextColor3 = Color3.fromRGB(0,255,0)
+    Frame:Destroy() -- ẩn GUI
+    
+    -- Запускаем автоматическое нажатие кнопки
+    setupBackButtonAutoClick()
+
+    -- Script auto của bạn
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local TeleportService = game:GetService("TeleportService")
+    local remoteFunction = ReplicatedStorage:WaitForChild("RemoteFunction")
+    local player = game.Players.LocalPlayer
+
+    if workspace:FindFirstChild("Elevators") then
+        local args = {
+            [1] = "Multiplayer",
+            [2] = "v2:start",
+            [3] = { ["count"] = 1, ["mode"] = "halloween" }
+        }
+        remoteFunction:InvokeServer(unpack(args))
+    else
+        remoteFunction:InvokeServer("Voting", "Skip")
+        task.wait(1)
+    end
+
+    local guiPath = player:WaitForChild("PlayerGui")
+        :WaitForChild("ReactUniversalHotbar")
+        :WaitForChild("Frame")
+        :WaitForChild("values")
+        :WaitForChild("cash")
+        :WaitForChild("amount")
+
+    local function getCash()
+        local rawText = guiPath.Text or ""
+        local cleaned = rawText:gsub("[^%d%-]", "")
+        return tonumber(cleaned) or 0
+    end
+
+    local function waitForCash(minAmount)
+        while getCash() < minAmount do
+            task.wait(1)
+        end
+    end
+
+    local function safeInvoke(args, cost)
+        waitForCash(cost)
+        pcall(function()
+            remoteFunction:InvokeServer(unpack(args))
+        end)
+        task.wait(1)
+    end
+
+    local sequence = {
+        { args = { "Troops", "Pl\208\176ce", { Rotation = CFrame.new(), Position = Vector3.new(4.668, 2.349, -37.184) }, "Shotgunner" }, cost = 300 },
+        { args = { "Troops", "Pl\208\176ce", { Rotation = CFrame.new(), Position = Vector3.new(-1.643, 2.349, -36.870) }, "Shotgunner" }, cost = 300 },
+        { args = { "Troops", "Pl\208\176ce", { Rotation = CFrame.new(), Position = Vector3.new(4.487, 2.386, -34.154) }, "Shotgunner" }, cost = 300 },
+        { args = { "Troops", "Pl\208\176ce", { Rotation = CFrame.new(), Position = Vector3.new(-1.185, 2.386, -33.905) }, "Shotgunner" }, cost = 300 },
+        { args = { "Troops", "Pl\208\176ce", { Rotation = CFrame.new(), Position = Vector3.new(-0.616, 2.386, -30.504) }, "Shotgunner" }, cost = 300 },
+        { args = { "Troops", "Pl\208\176ce", { Rotation = CFrame.new(), Position = Vector3.new(7.143, 2.350, -39.064) }, "Trapper" }, cost = 500 },
+        { args = { "Troops", "Pl\208\176ce", { Rotation = CFrame.new(), Position = Vector3.new(7.671, 2.386, -35.299) }, "Trapper" }, cost = 500 },
+        { args = { "Troops", "Pl\208\176ce", { Rotation = CFrame.new(), Position = Vector3.new(-4.269, 2.349, -38.972) }, "Trapper" }, cost = 500 },
+        { args = { "Troops", "Pl\208\176ce", { Rotation = CFrame.new(), Position = Vector3.new(4.907, 2.386, -31.026) }, "Trapper" }, cost = 500 },
+        { args = { "Troops", "Pl\208\176ce", { Rotation = CFrame.new(), Position = Vector3.new(7.948, 2.386, -30.539) }, "Trapper" }, cost = 500 },
+        { args = { "Troops", "Pl\208\176ce", { Rotation = CFrame.new(), Position = Vector3.new(0.052, 2.386, -27.333) }, "Trapper" }, cost = 500 },
+        { args = { "Troops", "Pl\208\176ce", { Rotation = CFrame.new(), Position = Vector3.new(3.450, 2.386, -25.265) }, "Trapper" }, cost = 500 },
+    }
+
+    for _, step in ipairs(sequence) do
+        safeInvoke(step.args, step.cost)
+    end
+
+    task.delay(260, function()
+        TeleportService:Teleport(3260590327)
+    end)
+
+    local towerFolder = workspace:WaitForChild("Towers")
+    while true do
+        for _, tower in ipairs(towerFolder:GetChildren()) do
+            local args = { "Troops", "Upgrade", "Set", { Troop = tower, Path = 1 } }
+            pcall(function()
+                remoteFunction:InvokeServer(unpack(args))
+            end)
+        end
+        task.wait(1)
+    end
+end
+
+-- Nút Check Key
+CheckKeyButton.MouseButton1Click:Connect(function()
+    if KeyBox.Text == FIXED_KEY then
+        saveKey()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "Key System",
+            Text = "Key valid! Running auto script...",
+            Duration = 5
+        })
+        runAutoScript()
+    else
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "Key System",
+            Text = "Key invalid!",
+            Duration = 3
+        })
+    end
+end)
+
+-- Kiểm tra key lưu sẵn
+if isKeyValid() then
+    StatusLabel.Text = "BlackCat Hub - Active"
+    StatusLabel.TextColor3 = Color3.fromRGB(0,255,0)
+    runAutoScript()
+end
